@@ -1495,7 +1495,7 @@ static int kgsl_iommu_setup_defaultpagetable(struct kgsl_mmu *mmu)
 
 	/* If chip is not 8960 then we use the 2nd context bank for pagetable
 	 * switching on the 3D side for which a separate table is allocated */
-	if (!cpu_is_msm8960() && msm_soc_version_supports_iommu_v0()) {
+	if (msm_soc_version_supports_iommu_v0()) {
 		mmu->priv_bank_table =
 			kgsl_mmu_getpagetable(mmu,
 					KGSL_MMU_PRIV_BANK_TABLE_NAME);
@@ -1747,9 +1747,11 @@ kgsl_iommu_unmap(struct kgsl_pagetable *pt,
 		struct kgsl_memdesc *memdesc,
 		unsigned int *tlb_flags)
 {
-	int ret;
+	int ret = 0, lock_taken = 0;
 	unsigned int range = memdesc->size;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
+	struct kgsl_device *device = pt->mmu->device;
+	struct kgsl_iommu *iommu = pt->mmu->priv;
 
 	/* All GPU addresses as assigned are page aligned, but some
 	   functions purturb the gpuaddr with an offset, so apply the
@@ -1764,18 +1766,30 @@ kgsl_iommu_unmap(struct kgsl_pagetable *pt,
 		range += PAGE_SIZE;
 
 	ret = iommu_unmap_range(iommu_pt->domain, gpuaddr, range);
-	if (ret)
+	if (ret) {
 		KGSL_CORE_ERR("iommu_unmap_range(%p, %x, %d) failed "
 			"with err: %d\n", iommu_pt->domain, gpuaddr,
 			range, ret);
+		return ret;
+	}
+
+	if (!kgsl_mutex_lock(&device->mutex, &device->mutex_owner))
+		lock_taken = 1;
 
 	/*
-	 * Flushing only required if per process pagetables are used. With
-	 * global case, flushing will happen inside iommu_map function
+	 * Flush the tlb only if the iommu device is attached and the pagetable
+	 * hasn't been switched yet
 	 */
-	if (!ret && kgsl_mmu_is_perprocess(pt->mmu))
-		*tlb_flags = UINT_MAX;
-	return 0;
+	if (kgsl_mmu_is_perprocess(pt->mmu) &&
+		iommu->iommu_units[0].dev[KGSL_IOMMU_CONTEXT_USER].attached &&
+		kgsl_iommu_pt_equal(pt->mmu, pt,
+		kgsl_iommu_get_current_ptbase(pt->mmu)))
+		kgsl_iommu_default_setstate(pt->mmu, KGSL_MMUFLAGS_TLBFLUSH);
+
+	if (lock_taken)
+		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+
+	return ret;
 }
 
 static int
