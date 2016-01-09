@@ -79,13 +79,42 @@
 #define MSMFB_WRITEBACK_SET_MIRRORING_HINT _IOW(MSMFB_IOCTL_MAGIC, 167, \
 						unsigned int)
 #define MSMFB_ASYNC_BLIT              _IOW(MSMFB_IOCTL_MAGIC, 168, unsigned int)
-#define MSMFB_INVERT_PANEL  _IOW(MSMFB_IOCTL_MAGIC, 169, unsigned int)
 #define MSMFB_OVERLAY_PREPARE		_IOWR(MSMFB_IOCTL_MAGIC, 169, \
 						struct mdp_overlay_list)
+#define MSMFB_LPM_ENABLE        _IOWR(MSMFB_IOCTL_MAGIC, 170, unsigned int)
+#define MSMFB_INVERT_PANEL  _IOW(MSMFB_IOCTL_MAGIC, 171, unsigned int)
 
+#if defined(CONFIG_LGE_BROADCAST_TDMB)
+#define MSMFB_DMB_SET_FLAG        _IOW(MSMFB_IOCTL_MAGIC, 172, int)
+#define MSMFB_DMB_SET_CSC_MATRIX  _IOW(MSMFB_IOCTL_MAGIC, 173, struct mdp_csc_cfg)
+#endif /* LGE_BROADCAST */
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
+
+/* HW Revisions for different MDSS targets */
+#define MDSS_GET_MAJOR(rev)		((rev) >> 28)
+#define MDSS_GET_MINOR(rev)		(((rev) >> 16) & 0xFFF)
+#define MDSS_GET_STEP(rev)		((rev) & 0xFFFF)
+#define MDSS_GET_MAJOR_MINOR(rev)	((rev) >> 16)
+
+#define IS_MDSS_MAJOR_MINOR_SAME(rev1, rev2)	\
+	(MDSS_GET_MAJOR_MINOR((rev1)) == MDSS_GET_MAJOR_MINOR((rev2)))
+
+#define MDSS_MDP_REV(major, minor, step)	\
+	((((major) & 0x000F) << 28) |		\
+	 (((minor) & 0x0FFF) << 16) |		\
+	 ((step)   & 0xFFFF))
+
+#define MDSS_MDP_HW_REV_100	MDSS_MDP_REV(1, 0, 0) /* 8974 v1.0 */
+#define MDSS_MDP_HW_REV_101	MDSS_MDP_REV(1, 1, 0) /* 8x26 v1.0 */
+#define MDSS_MDP_HW_REV_101_1	MDSS_MDP_REV(1, 1, 1) /* 8x26 v2.0, 8926 v1.0 */
+#define MDSS_MDP_HW_REV_101_2	MDSS_MDP_REV(1, 1, 2) /* 8926 v2.0 */
+#define MDSS_MDP_HW_REV_102	MDSS_MDP_REV(1, 2, 0) /* 8974 v2.0 */
+#define MDSS_MDP_HW_REV_102_1	MDSS_MDP_REV(1, 2, 1) /* 8974 v3.0 (Pro) */
+#define MDSS_MDP_HW_REV_103	MDSS_MDP_REV(1, 3, 0) /* 8084 v1.0 */
+#define MDSS_MDP_HW_REV_103_1	MDSS_MDP_REV(1, 3, 1) /* 8084 v1.1 */
+#define MDSS_MDP_HW_REV_200	MDSS_MDP_REV(2, 0, 0) /* 8092 v1.0 */
 
 enum {
 	NOTIFY_UPDATE_START,
@@ -97,6 +126,7 @@ enum {
 	NOTIFY_TYPE_NO_UPDATE,
 	NOTIFY_TYPE_SUSPEND,
 	NOTIFY_TYPE_UPDATE,
+	NOTIFY_TYPE_BL_UPDATE,
 };
 
 enum {
@@ -197,6 +227,7 @@ enum {
 #define MDP_MEMORY_ID_TYPE_FB		0x00001000
 #define MDP_BWC_EN			0x00000400
 #define MDP_DECIMATION_EN		0x00000800
+#define MDP_SMP_FORCE_ALLOC            0x00200000
 #define MDP_TRANSP_NOP 0xffffffff
 #define MDP_ALPHA_NOP 0xff
 
@@ -425,7 +456,7 @@ struct mdp_pa_mem_col_cfg {
 	uint32_t val_region;
 };
 
-#define MDP_SIX_ZONE_TABLE_NUM		384
+#define MDP_SIX_ZONE_LUT_SIZE		384
 
 struct mdp_pa_v2_data {
 	/* Mask bits for PA features */
@@ -434,12 +465,13 @@ struct mdp_pa_v2_data {
 	uint32_t global_sat_adj;
 	uint32_t global_val_adj;
 	uint32_t global_cont_adj;
-	uint32_t *six_zone_curve_p0;
-	uint32_t *six_zone_curve_p1;
-	uint32_t six_zone_thresh;
 	struct mdp_pa_mem_col_cfg skin_cfg;
 	struct mdp_pa_mem_col_cfg sky_cfg;
 	struct mdp_pa_mem_col_cfg fol_cfg;
+	uint32_t six_zone_len;
+	uint32_t six_zone_thresh;
+	uint32_t *six_zone_curve_p0;
+	uint32_t *six_zone_curve_p1;
 };
 
 struct mdp_igc_lut_data {
@@ -664,16 +696,12 @@ struct mdp_misr {
 };
 
 /*
-
 	mdp_block_type defines the identifiers for pipes in MDP 4.3 and up
-
 	MDP_BLOCK_RESERVED is provided for backward compatibility and is
 	deprecated. It corresponds to DMA_P. So MDP_BLOCK_DMA_P should be used
 	instead.
-
 	MDP_LOGICAL_BLOCK_DISP_0 identifies the display pipe which fb0 uses,
 	same for others.
-
 */
 
 enum {
@@ -822,10 +850,17 @@ enum {
 	DCM_ENTER,
 	DCM_EXIT,
 	DCM_BLANK,
+	DTM_ENTER,
+	DTM_EXIT,
 };
+
+#define MDSS_PP_SPLIT_LEFT_ONLY		0x10000000
+#define MDSS_PP_SPLIT_RIGHT_ONLY	0x20000000
+#define MDSS_PP_SPLIT_MASK		0x30000000
 
 #define MDSS_MAX_BL_BRIGHTNESS 255
 #define AD_BL_LIN_LEN 256
+#define AD_BL_ATT_LUT_LEN 33
 
 #define MDSS_AD_MODE_AUTO_BL	0x0
 #define MDSS_AD_MODE_AUTO_STR	0x1
@@ -854,9 +889,13 @@ struct mdss_ad_init {
 	uint16_t frame_h;
 	uint8_t logo_v;
 	uint8_t logo_h;
+	uint32_t alpha;
+	uint32_t alpha_base;
 	uint32_t bl_lin_len;
+	uint32_t bl_att_len;
 	uint32_t *bl_lin;
 	uint32_t *bl_lin_inv;
+	uint32_t *bl_att_lut;
 };
 
 #define MDSS_AD_BL_CTRL_MODE_EN 1
@@ -1001,6 +1040,7 @@ struct msmfb_metadata {
 
 #define MDP_MAX_FENCE_FD	32
 #define MDP_BUF_SYNC_FLAG_WAIT	1
+#define MDP_BUF_SYNC_FLAG_RETIRE_FENCE	0x10
 
 struct mdp_buf_sync {
 	uint32_t flags;
@@ -1008,6 +1048,7 @@ struct mdp_buf_sync {
 	uint32_t session_id;
 	int *acq_fen_fd;
 	int *rel_fen_fd;
+	int *retire_fen_fd;
 };
 
 struct mdp_async_blit_req_list {
@@ -1017,19 +1058,11 @@ struct mdp_async_blit_req_list {
 };
 
 #define MDP_DISPLAY_COMMIT_OVERLAY	1
-struct mdp_buf_fence {
-	uint32_t flags;
-	uint32_t acq_fen_fd_cnt;
-	int acq_fen_fd[MDP_MAX_FENCE_FD];
-	int rel_fen_fd[MDP_MAX_FENCE_FD];
-};
-
 
 struct mdp_display_commit {
 	uint32_t flags;
 	uint32_t wait_for_finish;
 	struct fb_var_screeninfo var;
-	struct mdp_buf_fence buf_fence;
 	struct mdp_rect roi;
 };
 
