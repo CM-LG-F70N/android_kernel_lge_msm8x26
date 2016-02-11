@@ -272,7 +272,7 @@ static void adreno_input_work(struct work_struct *work)
 			struct adreno_device, input_work);
 	struct kgsl_device *device = &adreno_dev->dev;
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 
 	device->flags |= KGSL_FLAG_WAKE_ON_TOUCH;
 
@@ -290,7 +290,7 @@ static void adreno_input_work(struct work_struct *work)
 	 */
 	mod_timer(&device->idle_timer,
 		jiffies + msecs_to_jiffies(_wake_timeout));
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 }
 
 /*
@@ -1137,7 +1137,9 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 					uint32_t flags)
 {
 	phys_addr_t pt_val;
-	unsigned int *link = NULL, *cmds;
+	unsigned int link[230];
+	unsigned int *cmds = &link[0];
+	int sizedwords = 0;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	int num_iommu_units;
 	struct kgsl_context *context;
@@ -1158,14 +1160,6 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 	}
 	adreno_ctx = ADRENO_CONTEXT(context);
 
-	link = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	if (link == NULL) {
-		result = -ENOMEM;
-		goto done;
-	}
-
-	cmds = link;
-
 	result = kgsl_mmu_enable_clk(&device->mmu, KGSL_IOMMU_CONTEXT_USER);
 
 	if (result)
@@ -1185,11 +1179,17 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 		cmds += _adreno_iommu_setstate_v1(device, cmds, pt_val,
 						num_iommu_units, flags);
 
+	sizedwords += (cmds - &link[0]);
+	if (sizedwords == 0) {
+		KGSL_DRV_ERR(device, "no commands generated\n");
+		BUG();
+	}
 	/* invalidate all base pointers */
 	*cmds++ = cp_type3_packet(CP_INVALIDATE_STATE, 1);
 	*cmds++ = 0x7fff;
+	sizedwords += 2;
 
-	if ((unsigned int) (cmds - link) > (PAGE_SIZE / sizeof(unsigned int))) {
+	if (sizedwords > (ARRAY_SIZE(link))) {
 		KGSL_DRV_ERR(device, "Temp command buffer overflow\n");
 		BUG();
 	}
@@ -1198,22 +1198,18 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 	 * use the global timestamp for iommu clock disablement
 	 */
 	result = adreno_ringbuffer_issuecmds(device, adreno_ctx,
-			KGSL_CMD_FLAGS_PMODE, link,
-			(unsigned int)(cmds - link));
+			KGSL_CMD_FLAGS_PMODE, &link[0], sizedwords);
 
 	/*
 	 * On error disable the IOMMU clock right away otherwise turn it off
 	 * after the command has been retired
 	 */
 	if (result)
-		kgsl_mmu_disable_clk(&device->mmu,
-						KGSL_IOMMU_CONTEXT_USER);
+		kgsl_mmu_disable_clk_on_ts(&device->mmu, 0, false);
 	else
-		kgsl_mmu_disable_clk_on_ts(&device->mmu, rb->global_ts,
-						KGSL_IOMMU_CONTEXT_USER);
+		kgsl_mmu_disable_clk_on_ts(&device->mmu, rb->global_ts, true);
 
 done:
-	kfree(link);
 	kgsl_context_put(context);
 	return result;
 }
@@ -1692,12 +1688,6 @@ static int adreno_of_get_pdata(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	/* get pm-qos-latency from target, set it to default if not found */
-	if (adreno_of_read_property(pdev->dev.of_node, "qcom,pm-qos-latency",
-		&pdata->pm_qos_latency))
-		pdata->pm_qos_latency = 501;
-
-
 	if (adreno_of_read_property(pdev->dev.of_node, "qcom,idle-timeout",
 		&pdata->idle_timeout))
 		pdata->idle_timeout = HZ/12;
@@ -2099,7 +2089,7 @@ static void adreno_start_work(struct work_struct *work)
 	/* Nice ourselves to be higher priority but not too high priority */
 	set_user_nice(current, _wake_nice);
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 	/*
 	 *  If adreno start is already called, no need to call it again
 	 *  it can lead to unpredictable behavior if we try to start
@@ -2119,7 +2109,7 @@ static void adreno_start_work(struct work_struct *work)
 		_status = _adreno_start(adreno_dev);
 	else
 		_status = 0;
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 }
 
 /**
@@ -2144,9 +2134,9 @@ static int adreno_start(struct kgsl_device *device, int priority)
 	 * higher priority work queue and wait for it to finish
 	 */
 	queue_work(adreno_wq, &adreno_dev->start_work);
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 	flush_work(&adreno_dev->start_work);
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 
 	return _status;
 }
@@ -2346,33 +2336,15 @@ static int _ft_pagefault_policy_store(struct device *dev,
 				     const char *buf, size_t count)
 {
 	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	int ret = 0;
-	unsigned int policy = 0;
+	int ret;
 	if (adreno_dev == NULL)
 		return 0;
 
 	mutex_lock(&adreno_dev->dev.mutex);
-
-	/* MMU option changed call function to reset MMU options */
-	if (count != _ft_sysfs_store(buf, count, &policy))
-		ret = -EINVAL;
-
-	if (!ret) {
-		policy &= (KGSL_FT_PAGEFAULT_INT_ENABLE |
-				KGSL_FT_PAGEFAULT_GPUHALT_ENABLE |
-				KGSL_FT_PAGEFAULT_LOG_ONE_PER_PAGE |
-				KGSL_FT_PAGEFAULT_LOG_ONE_PER_INT);
-		ret = kgsl_mmu_set_pagefault_policy(&(adreno_dev->dev.mmu),
-				adreno_dev->ft_pf_policy);
-		if (!ret)
-			adreno_dev->ft_pf_policy = policy;
-	}
+	ret = _ft_sysfs_store(buf, count, &adreno_dev->ft_pf_policy);
 	mutex_unlock(&adreno_dev->dev.mutex);
 
-	if (!ret)
-		return count;
-	else
-		return 0;
+	return ret;
 }
 
 /**
@@ -2423,12 +2395,9 @@ static int _ft_fast_hang_detect_store(struct device *dev,
 
 	if (tmp != adreno_dev->fast_hang_detect) {
 		if (adreno_dev->fast_hang_detect) {
-			if (adreno_dev->gpudev->fault_detect_start &&
-				!kgsl_active_count_get(&adreno_dev->dev)) {
+			if (adreno_dev->gpudev->fault_detect_start)
 				adreno_dev->gpudev->fault_detect_start(
 					adreno_dev);
-				kgsl_active_count_put(&adreno_dev->dev);
-			}
 		} else {
 			if (adreno_dev->gpudev->fault_detect_stop)
 				adreno_dev->gpudev->fault_detect_stop(
@@ -2723,7 +2692,7 @@ static int adreno_setproperty(struct kgsl_device *device,
  * Return true if the RBBM status register for the GPU type indicates that the
  * hardware is idle
  */
-bool adreno_hw_isidle(struct kgsl_device *device)
+static bool adreno_hw_isidle(struct kgsl_device *device)
 {
 	unsigned int reg_rbbm_status;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -2835,12 +2804,6 @@ bool adreno_isidle(struct kgsl_device *device)
 		return true;
 
 	rptr = adreno_get_rptr(&adreno_dev->ringbuffer);
-
-	/*
-	 * wptr is updated when we add commands to ringbuffer, add a barrier
-	 * to make sure updated wptr is compared to rptr
-	 */
-	smp_mb();
 
 	if (rptr == adreno_dev->ringbuffer.wptr)
 		return adreno_hw_isidle(device);

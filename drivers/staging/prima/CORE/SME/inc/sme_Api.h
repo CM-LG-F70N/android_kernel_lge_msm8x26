@@ -202,7 +202,7 @@ eHalStatus sme_Start(tHalHandle hHal);
   
   \param hHal - The handle returned by macOpen.
 
-  \param tHalStopType - reason for stopping
+  \param pmcFlag - The flag tells SME if we want to stop PMC or not
   
   \return eHAL_STATUS_SUCCESS - SME is stopped.
   
@@ -211,7 +211,7 @@ eHalStatus sme_Start(tHalHandle hHal);
   \sa
   
   --------------------------------------------------------------------------*/
-eHalStatus sme_Stop(tHalHandle hHal, tHalStopType stopType);
+eHalStatus sme_Stop(tHalHandle hHal, tANI_BOOLEAN pmcFlag);
 
 
 /*--------------------------------------------------------------------------
@@ -853,17 +853,6 @@ eHalStatus sme_GetTsmStats(tHalHandle hHal,
     \- return Success or failure
     -------------------------------------------------------------------------*/
 eHalStatus sme_SetCCKMIe(tHalHandle hHal, tANI_U8 sessionId, tANI_U8 *pCckmIe, tANI_U8 cckmIeLen);
-
-
-/* ---------------------------------------------------------------------------
-    \fn sme_SetCcxBeaconRequest
-    \brief  function to set CCX beacon request parameters
-    \param  hHal - HAL handle for device
-    \param  pCcxBcnReq - pointer to CCX beacon request
-    \- return Success or failure
-    -------------------------------------------------------------------------*/
-eHalStatus sme_SetCcxBeaconRequest(tHalHandle hHal, const tANI_U8 sessionId,
-                                   const tCsrCcxBeaconReq* pCcxBcnReq);
 
 
 #endif /*FEATURE_WLAN_CCX && FEATURE_WLAN_CCX_UPLOAD */
@@ -2778,6 +2767,18 @@ eHalStatus sme_SetCcxRoamScanChannelList(tHalHandle hHal,
 #endif
 
 /*--------------------------------------------------------------------------
+  \brief csrUpdateBgScanConfigIniChannelList() - Update bgscan roam cache
+  This is a synchronuous call
+  \param hHal - The handle returned by macOpen.
+  \return eHAL_STATUS_SUCCESS - SME update config successful.
+          Other status means SME is failed to update
+  \sa
+  --------------------------------------------------------------------------*/
+eHalStatus sme_UpdateBgScanConfigIniChannelList(tHalHandle hHal,
+                                               eCsrBand eBand);
+
+
+/*--------------------------------------------------------------------------
   \brief sme_getRoamScanChannelList() - get roam scan channel list
   This is a synchronuous call
   \param hHal - The handle returned by macOpen.
@@ -2867,26 +2868,14 @@ eHalStatus sme_UpdateRoamScanOffloadEnabled(tHalHandle hHal, v_BOOL_t nRoamScanO
 
 /* ---------------------------------------------------------------------------
     \fn sme_IsFeatureSupportedByFW
-    \brief  Check if a feature is enabled by FW
-
-    \param  featEnumValue - Enumeration value of the feature to be checked.
+    \brief  Check if an feature is enabled by FW
+            
+    \param  feattEnumValue - Enumeration value of the feature to be checked.
                 A value from enum placeHolderInCapBitmap
                               
     \- return 1/0 (TRUE/FALSE) 
     -------------------------------------------------------------------------*/
 tANI_U8 sme_IsFeatureSupportedByFW(tANI_U8 featEnumValue);
-
-/* ---------------------------------------------------------------------------
-    \fn sme_IsFeatureSupportedByDriver
-    \brief  Check if a feature is enabled by driver
-
-    \param  featEnumValue - Enumeration value of the feature to be checked.
-                A value from enum placeHolderInCapBitmap
-
-    \- return 1/0 (TRUE/FALSE)
-    -------------------------------------------------------------------------*/
-tANI_U8 sme_IsFeatureSupportedByDriver(tANI_U8 featEnumValue);
-
 #ifdef FEATURE_WLAN_TDLS
 
 /* ---------------------------------------------------------------------------
@@ -3149,4 +3138,6 @@ sme_StopBatchScanInd
 );
 
 #endif
+
+
 #endif //#if !defined( __SME_API_H )

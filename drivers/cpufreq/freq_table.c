@@ -61,6 +61,9 @@ int cpufreq_frequency_table_verify(struct cpufreq_policy *policy,
 	pr_debug("request for verification of policy (%u - %u kHz) for cpu %u\n",
 					policy->min, policy->max, policy->cpu);
 
+	if (!cpu_online(policy->cpu))
+		return -EINVAL;
+
 	cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq,
 				     policy->cpuinfo.max_freq);
 
@@ -102,7 +105,7 @@ int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 		.index = ~0,
 		.frequency = 0,
 	};
-	unsigned int i, diff;
+	unsigned int i;
 
 	pr_debug("request for target %u kHz (relation: %u) for cpu %u\n",
 					target_freq, relation, policy->cpu);
@@ -112,10 +115,12 @@ int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 		suboptimal.frequency = ~0;
 		break;
 	case CPUFREQ_RELATION_L:
-	case CPUFREQ_RELATION_C:
 		optimal.frequency = ~0;
 		break;
 	}
+
+	if (!cpu_online(policy->cpu))
+		return -EINVAL;
 
 	for (i = 0; (table[i].frequency != CPUFREQ_TABLE_END); i++) {
 		unsigned int freq = table[i].frequency;
@@ -123,13 +128,9 @@ int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 			continue;
 		if ((freq < policy->min) || (freq > policy->max))
 			continue;
-		if (freq == target_freq) {
-			optimal.index = i;
-			break;
-		}
 		switch (relation) {
 		case CPUFREQ_RELATION_H:
-			if (freq < target_freq) {
+			if (freq <= target_freq) {
 				if (freq >= optimal.frequency) {
 					optimal.frequency = freq;
 					optimal.index = i;
@@ -142,7 +143,7 @@ int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 			}
 			break;
 		case CPUFREQ_RELATION_L:
-			if (freq > target_freq) {
+			if (freq >= target_freq) {
 				if (freq <= optimal.frequency) {
 					optimal.frequency = freq;
 					optimal.index = i;
@@ -152,15 +153,6 @@ int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 					suboptimal.frequency = freq;
 					suboptimal.index = i;
 				}
-			}
-			break;
-		case CPUFREQ_RELATION_C:
-			diff = abs(freq - target_freq);
-			if (diff < optimal.frequency ||
-			    (diff == optimal.frequency &&
-			     freq > table[optimal.index].frequency)) {
-				optimal.frequency = diff;
-				optimal.index = i;
 			}
 			break;
 		}
@@ -232,15 +224,6 @@ void cpufreq_frequency_table_put_attr(unsigned int cpu)
 	per_cpu(cpufreq_show_table, cpu) = NULL;
 }
 EXPORT_SYMBOL_GPL(cpufreq_frequency_table_put_attr);
-
-void cpufreq_frequency_table_update_policy_cpu(struct cpufreq_policy *policy)
-{
-	pr_debug("Updating show_table for new_cpu %u from last_cpu %u\n",
-			policy->cpu, policy->last_cpu);
-	per_cpu(cpufreq_show_table, policy->cpu) = per_cpu(cpufreq_show_table,
-			policy->last_cpu);
-	per_cpu(cpufreq_show_table, policy->last_cpu) = NULL;
-}
 
 struct cpufreq_frequency_table *cpufreq_frequency_get_table(unsigned int cpu)
 {

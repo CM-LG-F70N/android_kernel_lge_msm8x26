@@ -18063,6 +18063,7 @@ WDI_ProcessSetMaxTxPowerRsp
   {
      WPAL_TRACE( eWLAN_MODULE_DAL_CTRL,  eWLAN_PAL_TRACE_LEVEL_ERROR,
               "Error status returned in Set Max Tx Power Response ");
+     WDI_DetectedDeviceError( pWDICtx, WDI_ERR_BASIC_OP_FAILURE);
      return WDI_STATUS_E_FAILURE;
   }
 
@@ -20787,18 +20788,8 @@ WDI_RXMsgCTSCB
                wdiEventData.wdiResponse,
                WDI_getRespMsgString(pWDICtx->wdiExpectedResponse),
                pWDICtx->wdiExpectedResponse);
-
-    if (gWDICb.bEnableSSR == false)
-    {
-       WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_FATAL,
-            "SSR is not enabled on WDI timeout");
-       WDI_DetectedDeviceError(pWDICtx, WDI_ERR_BASIC_OP_FAILURE);
-       return;
-    }
-    wpalWcnssResetIntr();
-    /* if this timer fires, it means Riva did not receive the FIQ */
-    wpalTimerStart(&pWDICtx->ssrTimer, WDI_SSR_TIMEOUT);
-
+    /* WDI_DetectedDeviceError( pWDICtx, WDI_ERR_INVALID_RSP_FMT); */
+    VOS_BUG(0);
     return;
   }
 

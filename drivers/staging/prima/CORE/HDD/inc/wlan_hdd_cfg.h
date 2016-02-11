@@ -65,7 +65,7 @@
 #include <csrApi.h>
 
 //Number of items that can be configured
-#define MAX_CFG_INI_ITEMS   512
+#define MAX_CFG_INI_ITEMS   320
 
 // Defines for all of the things we read from the configuration (registry).
 
@@ -458,7 +458,7 @@ typedef enum
 #define CFG_AP_OBSS_PROTECTION_MODE_NAME       "gEnableApOBSSProt" 
 #define CFG_AP_OBSS_PROTECTION_MODE_MIN        ( 0 )
 #define CFG_AP_OBSS_PROTECTION_MODE_MAX        ( 1 ) 
-#define CFG_AP_OBSS_PROTECTION_MODE_DEFAULT    ( 1 )
+#define CFG_AP_OBSS_PROTECTION_MODE_DEFAULT    ( 0 )   
 
 #define CFG_AP_STA_SECURITY_SEPERATION_NAME    "gDisableIntraBssFwd"
 #define CFG_AP_STA_SECURITY_SEPERATION_MIN     ( 0 )
@@ -1645,6 +1645,15 @@ typedef enum
 #define CFG_ENABLE_RX_STBC_MAX                   ( 1 )
 #define CFG_ENABLE_RX_STBC_DEFAULT               ( 1 )
 
+/* 2013.07.11 moon-wifi@lge.com[formmh.kim] Add CountryCode [START] */
+#ifdef CUSTOMER_LGE
+#define CFG_OVERRIDE_COUNTRY_CODE				"gStaCountryCode"
+#define CFG_OVERRIDE_COUNTRY_CODE_MIN			"000"
+#define CFG_OVERRIDE_COUNTRY_CODE_MAX			"ZZZ"
+#define CFG_OVERRIDE_COUNTRY_CODE_DEFAULT		"000"
+#endif
+/* 2013.07.11 moon-wifi@lge.com[formmh.kim] Add CountryCode [END] */
+
 /* 
  * Enable/Disable vsta based on MAX Assoc limit 
  * defined in WCNSS_qcom_cfg.ini.
@@ -1916,41 +1925,11 @@ typedef enum
 #define CFG_AMSDU_SUPPORT_IN_AMPDU_DEFAULT             (0) //disabled
 
 #ifdef FEATURE_WLAN_SCAN_PNO
-#define CFG_PNO_SCAN_SUPPORT                         "gPNOScanSupport"
-#define CFG_PNO_SCAN_SUPPORT_ENABLE                  ( 1 )
-#define CFG_PNO_SCAN_SUPPORT_DISABLE                 ( 0 )
-#define CFG_PNO_SCAN_SUPPORT_DEFAULT                 ( 1 )
-
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE              "gPNOScanTimerRepeatValue"
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_DEFAULT      ( 6 )
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MIN          ( 0 )
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MAX          ( 0xffffffff )
 #endif
-
-#define CFG_DISABLE_ATH_NAME                       "gAthDisable"
-#define CFG_DISABLE_ATH_MIN                        (0)
-#define CFG_DISABLE_ATH_MAX                        (1)
-#define CFG_DISABLE_ATH_DEFAULT                    (0)
-
-#define CFG_BTC_ACTIVE_WLAN_LEN_NAME           "btcActiveWlanLen"
-#define CFG_BTC_ACTIVE_WLAN_LEN_MIN            ( 0 )
-#define CFG_BTC_ACTIVE_WLAN_LEN_MAX            ( 250000 )
-#define CFG_BTC_ACTIVE_WLAN_LEN_DEFAULT        ( 60000 )
-
-#define CFG_BTC_ACTIVE_BT_LEN_NAME             "btcActiveBtLen"
-#define CFG_BTC_ACTIVE_BT_LEN_MIN              ( 0 )
-#define CFG_BTC_ACTIVE_BT_LEN_MAX              ( 250000 )
-#define CFG_BTC_ACTIVE_BT_LEN_DEFAULT          ( 90000 )
-
-#define CFG_BTC_SAP_ACTIVE_WLAN_LEN_NAME       "btcSapActiveWlanLen"
-#define CFG_BTC_SAP_ACTIVE_WLAN_LEN_MIN        ( 0 )
-#define CFG_BTC_SAP_ACTIVE_WLAN_LEN_MAX        ( 250000 )
-#define CFG_BTC_SAP_ACTIVE_WLAN_LEN_DEFAULT    ( 60000 )
-
-#define CFG_BTC_SAP_ACTIVE_BT_LEN_NAME         "btcSapActiveBtLen"
-#define CFG_BTC_SAP_ACTIVE_BT_LEN_MIN          ( 0 )
-#define CFG_BTC_SAP_ACTIVE_BT_LEN_MAX          ( 250000 )
-#define CFG_BTC_SAP_ACTIVE_BT_LEN_DEFAULT      ( 90000 )
 
 /*--------------------------------------------------------------------------- 
   Type declarations
@@ -2290,6 +2269,11 @@ typedef struct
    v_U16_t                     configMccParam;
    v_U32_t                     numBuffAdvert;
    v_BOOL_t                    enableRxSTBC;
+/* 2013.07.16 moon-wifi@lge.com[formmh.kim] Add CountryCode [START] */
+ #ifdef CUSTOMER_LGE
+   char                        overrideCountryCode[4];
+#endif
+/* 2013.07.16 moon-wifi@lge.com[formmh.kim] Add CountryCode [END] */
 #ifdef FEATURE_WLAN_TDLS       
    v_BOOL_t                    fEnableTDLSSupport;
    v_BOOL_t                    fEnableTDLSImplicitTrigger;
@@ -2350,15 +2334,9 @@ typedef struct
    v_BOOL_t                    fEnableSNRMonitoring;
    v_U8_t                      isAmsduSupportInAMPDU;
    /*PNO related parameters */
-#ifdef FEATURE_WLAN_SCAN_PNO
-   v_BOOL_t                    configPNOScanSupport;
+#if FEATURE_WLAN_SCAN_PNO
    v_U32_t                     configPNOScanTimerRepeatValue;
 #endif
-   v_BOOL_t                    cfgAthDisable;
-   v_U32_t                     cfgBtcActiveWlanLen;
-   v_U32_t                     cfgBtcActiveBtLen;
-   v_U32_t                     cfgBtcSapActiveWlanLen;
-   v_U32_t                     cfgBtcSapActiveBtLen;
 } hdd_config_t;
 /*--------------------------------------------------------------------------- 
   Function declarations and documenation

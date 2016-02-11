@@ -24,7 +24,6 @@
 
 /* CONFIG HEADER */
 /*
-
 	MODULE_ID,
 	DEVICE,
 	NUM_COMMANDS,

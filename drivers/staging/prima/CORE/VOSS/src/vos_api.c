@@ -505,29 +505,11 @@ VOS_STATUS vos_preStart( v_CONTEXT_t vosContext )
    VOS_TRACE(VOS_MODULE_ID_SYS, VOS_TRACE_LEVEL_INFO,
              "vos prestart");
 
-   if (gpVosContext != pVosContext)
-   {
-      VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: Context mismatch", __func__);
-      VOS_ASSERT(0);
-      return VOS_STATUS_E_INVAL;
-   }
+   VOS_ASSERT(gpVosContext == pVosContext);
 
-   if (pVosContext->pMACContext == NULL)
-   {
-       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-            "%s: MAC NULL context", __func__);
-       VOS_ASSERT(0);
-       return VOS_STATUS_E_INVAL;
-   }
+   VOS_ASSERT( NULL != pVosContext->pMACContext);
 
-   if (pVosContext->pWDAContext == NULL)
-   {
-       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-          "%s: WDA NULL context", __func__);
-       VOS_ASSERT(0);
-       return VOS_STATUS_E_INVAL;
-   }
+   VOS_ASSERT( NULL != pVosContext->pWDAContext);
 
    /* call macPreStart */
    vStatus = macPreStart(gpVosContext->pMACContext);
@@ -750,7 +732,7 @@ VOS_STATUS vos_start( v_CONTEXT_t vosContext )
 
 
 err_sme_stop:
-  sme_Stop(pVosContext->pMACContext, HAL_STOP_TYPE_SYS_RESET);
+  sme_Stop(pVosContext->pMACContext, TRUE);
     
 err_mac_stop:
   macStop( pVosContext->pMACContext, HAL_STOP_TYPE_SYS_RESET );
@@ -1168,31 +1150,6 @@ void vos_set_load_unload_in_progress(VOS_MODULE_ID moduleId, v_U8_t value)
 
    gpVosContext->isLoadUnloadInProgress = value;
 }
-
-v_U8_t vos_is_reinit_in_progress(VOS_MODULE_ID moduleId, v_VOID_t *moduleContext)
-{
-  if (gpVosContext == NULL)
-  {
-    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-        "%s: global voss context is NULL", __func__);
-    return 1;
-  }
-
-   return gpVosContext->isReInitInProgress;
-}
-
-void vos_set_reinit_in_progress(VOS_MODULE_ID moduleId, v_U8_t value)
-{
-  if (gpVosContext == NULL)
-  {
-    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-        "%s: global voss context is NULL", __func__);
-    return;
-  }
-
-   gpVosContext->isReInitInProgress = value;
-}
-
 
 /**---------------------------------------------------------------------------
   
