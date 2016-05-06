@@ -100,7 +100,8 @@ endif
 # MSM8226
    zreladdr-$(CONFIG_ARCH_MSM8226)	:= 0x00008000
 ifeq ($(CONFIG_MACH_LGE),y)
-	dtb-$(CONFIG_MACH_MSM8926_F70N_GLOBAL_COM)  += msm8226-f70n.dtb
+	dtb-$(CONFIG_MACH_MSM8926_F70N_GLOBAL_COM)			+= msm8226-v1-f70n.dtb \
+																      msm8226-v2-f70n.dtb
 
 else # not CONFIG_MACH_LGE
 	dtb-$(CONFIG_ARCH_MSM8226)	+= msm8226-sim.dtb
