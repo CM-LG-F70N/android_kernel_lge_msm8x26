@@ -1,6 +1,4 @@
-obj-$(CONFIG_MSM_VIDC_V4L2) := 	msm_v4l2_vidc.o \
-				msm_vidc_common.o \
-				msm_smem.o \
+obj-$(CONFIG_MSM_VIDC_V4L2) :=  msm_smem.o \
 				msm_vidc_debug.o \
 				msm_vidc_res_parse.o \
 				venus_hfi.o \
